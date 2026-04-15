@@ -100,6 +100,33 @@ class T3(nn.Module):
                 t3_cond.cond_prompt_speech_emb += self.speech_pos_emb(t3_cond.cond_prompt_speech_tokens)
         return self.cond_enc(t3_cond)  # (B, len_cond, dim)
 
+    def resize_text_embeddings(self, new_size):
+        """
+        Resize text embeddings and text head to a new vocabulary size.
+        """
+        old_size = self.hp.text_tokens_dict_size
+        if old_size == new_size:
+            return
+        
+        self.hp.text_tokens_dict_size = new_size
+        
+        # Resize embedding
+        old_emb = self.text_emb
+        new_emb = nn.Embedding(new_size, self.dim).to(old_emb.weight.device)
+        n = min(old_size, new_size)
+        new_emb.weight.data[:n] = old_emb.weight.data[:n]
+        self.text_emb = new_emb
+        
+        # Resize head
+        old_head = self.text_head
+        new_head = nn.Linear(self.dim, new_size, bias=old_head.bias is not None).to(old_head.weight.device)
+        new_head.weight.data[:n] = old_head.weight.data[:n]
+        if old_head.bias is not None:
+            new_head.bias.data[:n] = old_head.bias.data[:n]
+        self.text_head = new_head
+        logger.info(f"Resized text embeddings from {old_size} to {new_size}")
+    
+
     def prepare_input_embeds(
         self,
         *,
